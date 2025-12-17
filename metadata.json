@@ -1,0 +1,5 @@
+{
+  "name": "VectorTrace Pro",
+  "description": "A dynamic SVG editor and image tracer. Features a professional canvas with zoom/pan, manual tracing tools with background image support, and algorithmic auto-tracing capabilities.",
+  "requestFramePermissions": []
+}
