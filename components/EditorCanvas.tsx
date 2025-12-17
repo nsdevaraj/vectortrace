@@ -9,6 +9,8 @@ interface EditorCanvasProps {
     onSelect: (id: string | null) => void;
     onAddShape: (shape: Shape) => void;
     onUpdateShape: (id: string, updates: Partial<Shape>) => void;
+    onImmediateUpdateShape: (id: string, updates: Partial<Shape>) => void;
+    onDeleteShape: (id: string) => void;
     onShapeActionEnd: () => void;
     setViewTransform: (t: ViewTransform) => void;
     fillColor: string;
@@ -30,6 +32,8 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
     onSelect,
     onAddShape,
     onUpdateShape,
+    onImmediateUpdateShape,
+    onDeleteShape,
     onShapeActionEnd,
     setViewTransform,
     fillColor,
@@ -56,6 +60,9 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
     const [penPoints, setPenPoints] = useState<Point[]>([]);
     const [cursorPos, setCursorPos] = useState<Point | null>(null);
 
+    // Context Menu State
+    const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; shapeId: string | null }>({ visible: false, x: 0, y: 0, shapeId: null });
+
     // Helper: Snap to grid
     const snap = (val: number) => {
         if (!snapToGrid) return val;
@@ -73,11 +80,6 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
 
     const handleWheel = (e: React.WheelEvent) => {
         if (!svgRef.current) return;
-        
-        // Prevent default browser zoom if ctrl is pressed (optional, but good UX)
-        // Note: e.preventDefault() in passive event might be ignored, but usually fine in React synthetic events
-        // However, we want to zoom regardless of ctrl key for this tool usually, 
-        // or follow standard conventions.
         
         const rect = svgRef.current.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
@@ -100,7 +102,29 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
         setViewTransform({ x: newX, y: newY, k: newK });
     };
 
+    const handleContextMenu = (e: React.MouseEvent, id: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Calculate safe position
+        const x = Math.min(e.clientX, window.innerWidth - 260);
+        const y = Math.min(e.clientY, window.innerHeight - 300);
+
+        setContextMenu({
+            visible: true,
+            x,
+            y,
+            shapeId: id
+        });
+    };
+
     const handleMouseDown = (e: React.MouseEvent) => {
+        // Close context menu if open
+        if (contextMenu.visible) {
+            setContextMenu({ ...contextMenu, visible: false });
+            return;
+        }
+
         const rawPt = getSVGPoint(e.clientX, e.clientY);
         const pt = { x: snap(rawPt.x), y: snap(rawPt.y) };
         isDirtyRef.current = false;
@@ -347,14 +371,15 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
                 setCurrentShape(null);
                 onSelect(null);
                 setCursorPos(null);
+                setContextMenu({ ...contextMenu, visible: false });
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [penPoints, fillColor, strokeColor]);
+    }, [penPoints, fillColor, strokeColor, contextMenu]);
 
     const handleShapeMouseDown = (e: React.MouseEvent, id: string) => {
-        if (tool === ToolType.SELECT) {
+        if (tool === ToolType.SELECT && e.button === 0) { // Only Left Click
             e.stopPropagation();
             onSelect(id);
             setIsDragging(true);
@@ -371,6 +396,8 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
         const d = `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
         return closed ? d + ' Z' : d;
     };
+
+    const targetShape = contextMenu.shapeId ? shapes.find(s => s.id === contextMenu.shapeId) : null;
 
     return (
         <div 
@@ -418,6 +445,7 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
                             key: shape.id,
                             className: `hover:opacity-80 transition-opacity ${isSelected ? 'outline-none' : ''}`,
                             onMouseDown: (e: React.MouseEvent) => handleShapeMouseDown(e, shape.id),
+                            onContextMenu: (e: React.MouseEvent) => handleContextMenu(e, shape.id),
                             style: { cursor: tool === ToolType.SELECT ? 'move' : 'inherit' }
                         };
 
@@ -568,6 +596,83 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
              {tool === ToolType.PEN && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/80 text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium backdrop-blur-sm pointer-events-none">
                     {penPoints.length === 0 ? 'Click to start drawing polygon' : penPoints.length > 2 ? 'Click to add point. Click start to close.' : 'Click to add point. Enter to finish.'}
+                </div>
+            )}
+
+            {/* Context Menu Overlay */}
+            {contextMenu.visible && (
+                <div className="fixed inset-0 z-40" onMouseDown={() => setContextMenu({ ...contextMenu, visible: false })} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ ...contextMenu, visible: false }); }}></div>
+            )}
+            
+            {/* Context Menu */}
+            {contextMenu.visible && targetShape && (
+                <div 
+                    className="fixed bg-white rounded-lg shadow-xl border border-slate-200 w-64 z-50 overflow-hidden text-sm"
+                    style={{ top: contextMenu.y, left: contextMenu.x }}
+                >
+                    <div className="bg-slate-50 px-3 py-2 border-b border-slate-100 font-bold text-slate-700">
+                        Edit Shape
+                    </div>
+                    <div className="p-3 space-y-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">Name</label>
+                            <input 
+                                type="text" 
+                                value={targetShape.name}
+                                onChange={(e) => onImmediateUpdateShape(targetShape.id, { name: e.target.value })}
+                                className="w-full border border-slate-300 rounded px-2 py-1 text-slate-700 focus:border-blue-500 outline-none"
+                            />
+                        </div>
+                        
+                        {(targetShape as any).fill !== undefined && (
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Fill Color</label>
+                                <div className="flex gap-2 items-center">
+                                    <input 
+                                        type="color" 
+                                        value={(targetShape as any).fill === 'none' ? '#ffffff' : (targetShape as any).fill}
+                                        onChange={(e) => onImmediateUpdateShape(targetShape.id, { fill: e.target.value })}
+                                        className="h-8 w-12 p-0 border-0 rounded cursor-pointer"
+                                    />
+                                    <button 
+                                        onClick={() => onImmediateUpdateShape(targetShape.id, { fill: 'none' })}
+                                        className={`px-2 py-1.5 text-xs rounded border transition-colors ${
+                                            (targetShape as any).fill === 'none' ? 'bg-slate-200 border-slate-300 text-slate-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        None
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {(targetShape as any).stroke !== undefined && (
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Stroke Color</label>
+                                <div className="flex gap-2 items-center">
+                                    <input 
+                                        type="color" 
+                                        value={(targetShape as any).stroke}
+                                        onChange={(e) => onImmediateUpdateShape(targetShape.id, { stroke: e.target.value })}
+                                        className="h-8 w-full p-0 border-0 rounded cursor-pointer"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        
+                        <div className="border-t border-slate-100 pt-3 mt-1">
+                            <button 
+                                onClick={() => {
+                                    onDeleteShape(targetShape.id);
+                                    setContextMenu({ ...contextMenu, visible: false });
+                                }}
+                                className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 py-1.5 rounded transition-colors font-medium"
+                            >
+                                <span className="material-symbols-outlined text-sm">delete</span>
+                                Delete Shape
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

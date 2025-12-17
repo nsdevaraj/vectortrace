@@ -186,6 +186,8 @@ function App() {
                     onSelect={setSelectedId}
                     onAddShape={handleAddShape}
                     onUpdateShape={handleTransientUpdateShape}
+                    onImmediateUpdateShape={handleImmediateUpdateShape}
+                    onDeleteShape={handleDelete}
                     onShapeActionEnd={handleShapeActionEnd}
                     setViewTransform={setViewTransform}
                     fillColor={fillColor}
