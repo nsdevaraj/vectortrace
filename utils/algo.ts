@@ -232,3 +232,73 @@ export const vectoriseEdges = (edgeData: Uint8ClampedArray, width: number, heigh
         return simplePath;
     }).filter(p => p.length > 1);
 };
+
+// --- Ramer-Douglas-Peucker Simplification ---
+
+// Calculates distance from a point to a line segment (start-end)
+const perpendicularDistance = (point: Point, start: Point, end: Point): number => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    
+    const magSq = dx * dx + dy * dy;
+    
+    // If line segment is a point
+    if (magSq === 0) {
+        return Math.sqrt(Math.pow(point.x - start.x, 2) + Math.pow(point.y - start.y, 2));
+    }
+    
+    // Projection of point onto line
+    const t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / magSq;
+    
+    // Clamping t to segment [0, 1] - usually RDP treats lines as infinite but for polygons segments matter.
+    // However, standard RDP uses infinite line for distance check.
+    // Let's use standard perpenidcular distance to the LINE passing through start and end
+    
+    // Normalizing direction vector
+    const mag = Math.sqrt(magSq);
+    const dirX = dx / mag;
+    const dirY = dy / mag;
+    
+    const pvx = point.x - start.x;
+    const pvy = point.y - start.y;
+    
+    // Project vector onto line direction
+    const pv_dot = pvx * dirX + pvy * dirY;
+    
+    // Nearest point on line
+    const dsx = pv_dot * dirX;
+    const dsy = pv_dot * dirY;
+    
+    // Perpendicular vector
+    const ax = pvx - dsx;
+    const ay = pvy - dsy;
+    
+    return Math.sqrt(ax * ax + ay * ay);
+};
+
+export const simplifyPath = (points: Point[], tolerance: number): Point[] => {
+    if (points.length < 3) return points;
+
+    let maxDist = 0;
+    let index = 0;
+    const last = points.length - 1;
+
+    // Find the point with the maximum distance
+    for (let i = 1; i < last; i++) {
+        const d = perpendicularDistance(points[i], points[0], points[last]);
+        if (d > maxDist) {
+            maxDist = d;
+            index = i;
+        }
+    }
+
+    // If max distance is greater than epsilon, recursively simplify
+    if (maxDist > tolerance) {
+        const firstPart = simplifyPath(points.slice(0, index + 1), tolerance);
+        const secondPart = simplifyPath(points.slice(index), tolerance);
+        // Concatenate, removing duplicate point at index
+        return [...firstPart.slice(0, -1), ...secondPart];
+    } else {
+        return [points[0], points[last]];
+    }
+};

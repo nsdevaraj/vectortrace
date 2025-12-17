@@ -71,6 +71,35 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
         };
     };
 
+    const handleWheel = (e: React.WheelEvent) => {
+        if (!svgRef.current) return;
+        
+        // Prevent default browser zoom if ctrl is pressed (optional, but good UX)
+        // Note: e.preventDefault() in passive event might be ignored, but usually fine in React synthetic events
+        // However, we want to zoom regardless of ctrl key for this tool usually, 
+        // or follow standard conventions.
+        
+        const rect = svgRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Zoom parameters
+        const delta = -Math.sign(e.deltaY);
+        const factor = 1.1;
+        const scaleChange = delta > 0 ? factor : 1 / factor;
+        
+        // Calculate new scale
+        let newK = viewTransform.k * scaleChange;
+        newK = Math.max(0.1, Math.min(50, newK)); // Limits 10% to 5000%
+
+        // Calculate new translation to keep mouse position stable
+        // Formula: newPos = mousePos - (mousePos - oldPos) * (newScale / oldScale)
+        const newX = mouseX - (mouseX - viewTransform.x) * (newK / viewTransform.k);
+        const newY = mouseY - (mouseY - viewTransform.y) * (newK / viewTransform.k);
+
+        setViewTransform({ x: newX, y: newY, k: newK });
+    };
+
     const handleMouseDown = (e: React.MouseEvent) => {
         const rawPt = getSVGPoint(e.clientX, e.clientY);
         const pt = { x: snap(rawPt.x), y: snap(rawPt.y) };
@@ -344,7 +373,10 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
     };
 
     return (
-        <div className="flex-1 bg-slate-100 overflow-hidden relative canvas-bg cursor-crosshair">
+        <div 
+            className="flex-1 bg-slate-100 overflow-hidden relative canvas-bg cursor-crosshair"
+            onWheel={handleWheel}
+        >
             <svg
                 ref={svgRef}
                 className="w-full h-full touch-none"

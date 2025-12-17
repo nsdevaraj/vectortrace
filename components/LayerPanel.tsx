@@ -1,5 +1,6 @@
 import React from 'react';
 import { Shape, ShapeType } from '../types';
+import { simplifyPath } from '../utils/algo';
 
 interface LayerPanelProps {
     shapes: Shape[];
@@ -117,6 +118,50 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({ shapes, selectedId, onSe
                                                 className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
                                             />
                                         </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {isSelected && shape.type === ShapeType.PATH && (
+                                <div className="mt-3 ml-8 border-t border-slate-100 pt-2">
+                                    <label className="text-[10px] text-slate-400 font-bold block mb-1">SIMPLIFY PATH</label>
+                                    <div className="flex items-center gap-2">
+                                         <button 
+                                             onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 const newPoints = simplifyPath(shape.points, 1.0); // Mild
+                                                 onUpdateShape(shape.id, { points: newPoints });
+                                             }}
+                                             className="px-2 py-1 text-xs bg-slate-50 hover:bg-slate-100 rounded text-slate-600 border border-slate-200 shadow-sm transition-all active:scale-95"
+                                             title="Remove redundant points (Tolerance 1.0)"
+                                         >
+                                             Mild
+                                         </button>
+                                         <button 
+                                             onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 const newPoints = simplifyPath(shape.points, 2.5); // Medium
+                                                 onUpdateShape(shape.id, { points: newPoints });
+                                             }}
+                                             className="px-2 py-1 text-xs bg-slate-50 hover:bg-slate-100 rounded text-slate-600 border border-slate-200 shadow-sm transition-all active:scale-95"
+                                             title="Optimize shape significantly (Tolerance 2.5)"
+                                         >
+                                             Med
+                                         </button>
+                                         <button 
+                                             onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 const newPoints = simplifyPath(shape.points, 5.0); // Strong
+                                                 onUpdateShape(shape.id, { points: newPoints });
+                                             }}
+                                             className="px-2 py-1 text-xs bg-slate-50 hover:bg-slate-100 rounded text-slate-600 border border-slate-200 shadow-sm transition-all active:scale-95"
+                                             title="Aggressive simplification (Tolerance 5.0)"
+                                         >
+                                             Strong
+                                         </button>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mt-1 text-right italic">
+                                        {shape.points.length} points
                                     </div>
                                 </div>
                             )}
